@@ -1,0 +1,16 @@
+# Data Ingestion & Parsing
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0        # Faster XML/HTML parsing for "Structure-Aware" chunking
+
+# RAG & LLM Framework
+langchain==0.1.0
+langchain-community==0.0.10
+langchain-openai==0.0.2  # Or langchain-huggingface if using open source
+faiss-cpu   # Vector Database (runs locally, easy to submit)
+tiktoken==0.5.2    # Token counting
+
+# Utilities
+python-dotenv==1.0.0
+tqdm==4.66.1       # Progress bars for long downloads/processing
+python-docx==1.1.0
