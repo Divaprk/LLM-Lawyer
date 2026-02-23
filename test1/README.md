@@ -45,8 +45,8 @@ Ask questions like:
 ### Step 1 — Clone the repo
 
 ```bash
-git clone <your-repo-url>
-cd <repo-folder>
+git clone <repo-url>
+cd LLM-Lawyer\test1
 ```
 
 ### Step 2 — Create a virtual environment
