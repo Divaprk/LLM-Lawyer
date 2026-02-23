@@ -1,0 +1,8 @@
+data/vectorstore/
+data/bm25_index.pkl
+data/processed_chunks.jsonl
+data/raw/
+__pycache__/
+*.pyc
+venv/
+.env

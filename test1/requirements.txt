@@ -1,0 +1,18 @@
+# Core scraping (only needed if re-running data collection)
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.2.1
+tqdm==4.66.4
+
+# Phase 2 — Embedding & Vector Store
+sentence-transformers==3.0.1
+chromadb==0.5.3
+rank_bm25==0.2.2
+
+# Phase 3 — LLM + Chatbot UI
+ollama>=0.2.0
+streamlit>=1.35.0
+
+# Optional: only needed if re-scraping eLitigation (requires Chrome installed)
+# selenium==4.21.0
+# webdriver-manager==4.0.1
