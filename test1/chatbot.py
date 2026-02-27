@@ -286,6 +286,44 @@ def verify_citations(answer: str, retrieved_chunks: list[dict]) -> tuple[str, li
     return answer, warnings
 
 
+def format_citations_for_display(text: str) -> str:
+    """
+    Convert inline citation brackets to superscript numbers and append
+    a numbered reference list after the response body.
+
+    e.g.  "...blah [SingaporeLegalAdvice: Title]..."
+      →   "...blah<sup>[1]</sup>...\n\n---\n**References:**\n1. SingaporeLegalAdvice: Title"
+    """
+    citation_pattern = re.compile(
+        r'\[(?:'
+        r'Employment Act s\.\w+'
+        r'|SingaporeLegalAdvice:\s*[^\]]+'
+        r'|Case:\s*[^\]]+'
+        r')\]'
+    )
+
+    seen: dict[str, int] = {}
+    counter = [0]
+
+    def _replace(match: re.Match) -> str:
+        citation = match.group(0)
+        if citation not in seen:
+            counter[0] += 1
+            seen[citation] = counter[0]
+        return f'<sup>[{seen[citation]}]</sup>'
+
+    formatted = citation_pattern.sub(_replace, text)
+
+    if seen:
+        refs = "\n".join(
+            f"{n}. {cite[1:-1]}"
+            for cite, n in sorted(seen.items(), key=lambda x: x[1])
+        )
+        formatted += f"\n\n---\n**References:**\n{refs}"
+
+    return formatted
+
+
 # ─────────────────────────────────────────────
 # FEATURE 5: Conversation Memory
 # ─────────────────────────────────────────────
@@ -511,7 +549,7 @@ def run_streamlit():
     # ── Chat history ──
     for role, content, warnings in st.session_state.chat_history:
         with st.chat_message(role):
-            st.markdown(content)
+            st.markdown(content, unsafe_allow_html=True)
             if warnings:
                 for w in warnings:
                     st.warning(w)
@@ -533,7 +571,8 @@ def run_streamlit():
                         st.session_state.memory,
                         verbose=False,
                     )
-                    st.markdown(reply)
+                    reply = format_citations_for_display(reply)
+                    st.markdown(reply, unsafe_allow_html=True)
                     for w in warnings:
                         st.warning(w)
 
