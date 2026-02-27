@@ -45,6 +45,15 @@ FINAL_TOP_K  = 5
 # RRF constant (60 is standard — don't change unless you have a reason)
 RRF_K = 60
 
+# Source-type score multipliers applied after RRF merge.
+# Statutes are boosted because they make up only ~8% of the corpus
+# (226 of 2886 chunks) and are chronically under-retrieved without help.
+SOURCE_WEIGHTS = {
+    "statute":   3.0,   # Employment Act sections — heavily underrepresented
+    "guideline": 1.0,   # SingaporeLegalAdvice — baseline
+    "case":      1.0,   # eLitigation — 66% of corpus, no boost needed
+}
+
 # BGE query prefix — required for BGE models at query time
 # (document embeddings don't use a prefix, but queries must)
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
@@ -360,6 +369,12 @@ def retrieve(
         for r in merged:
             if r["chunk_id"] in meta_lookup:
                 r.update(meta_lookup[r["chunk_id"]])
+
+    # ── Apply source-type weights and re-sort ──
+    for r in merged:
+        src = r.get("metadata", {}).get("source_type", "")
+        r["rrf_score"] = r["rrf_score"] * SOURCE_WEIGHTS.get(src, 1.0)
+    merged.sort(key=lambda x: x["rrf_score"], reverse=True)
 
     return merged[:top_k]
 
