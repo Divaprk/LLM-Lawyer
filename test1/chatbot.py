@@ -65,8 +65,7 @@ RULES YOU MUST FOLLOW:
    - For SLA articles: [SingaporeLegalAdvice: {article title}]
    - For court cases: [Case: {case name}]
 3. If the retrieved context does not contain enough information to answer the question, say exactly: "I'm sorry, I don't have enough information in my knowledge base to answer this question. Please consult a lawyer or visit mom.gov.sg for official guidance."
-4. Never give a definitive legal ruling. Use language like "under the Employment Act...", "according to...", "you may be entitled to...".
-5. Always end your response with this disclaimer: "⚠️ This is general information only and does not constitute legal advice. For your specific situation, please consult a qualified employment lawyer or the Ministry of Manpower (mom.gov.sg)."
+4. Never give a definitive legal ruling. Use language like "under the Employment Act...", "according to...", "you may be entitled to...". You are providing general legal information, not legal advice.
 
 FORMAT:
 - Use plain, simple English that a non-lawyer can understand.
@@ -511,6 +510,32 @@ def run_streamlit():
         page_title="Singapore Employment Law Assistant",
         page_icon="⚖️",
         layout="wide",
+    )
+
+    st.markdown(
+        """
+        <style>
+        .disclaimer-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #2a2a2a;
+            color: #cccccc;
+            text-align: center;
+            padding: 10px 16px;
+            font-size: 0.85rem;
+            z-index: 9999;
+            border-top: 1px solid #555555;
+        }
+        </style>
+        <div class="disclaimer-footer">
+            ⚠️ This is general information only and does not constitute legal advice.
+            For your specific situation, please consult a qualified employment lawyer or the
+            <a href="https://www.mom.gov.sg" target="_blank" style="color:#cccccc; text-decoration: underline;">Ministry of Manpower (mom.gov.sg)</a>.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     # ── Session state ──
