@@ -28,6 +28,9 @@ import os
 import re
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # loads OPENAI_API_KEY from .env
 
 # ─────────────────────────────────────────────
 # CONFIG
@@ -77,16 +80,15 @@ FORMAT:
 # ─────────────────────────────────────────────
 
 def _call_llm(messages: list[dict], max_tokens: int = LLM_MAX_TOKENS) -> str:
-    import ollama
-    response = ollama.chat(
-        model="llama3.1:8b",
+    from openai import OpenAI
+    client = OpenAI()  # uses OPENAI_API_KEY from environment
+    response = client.chat.completions.create(
+        model=LLM_MODEL,
         messages=messages,
-        options={
-            "temperature": LLM_TEMPERATURE,
-            "num_predict": max_tokens,
-        }
+        temperature=LLM_TEMPERATURE,
+        max_tokens=max_tokens,
     )
-    return response["message"]["content"].strip()
+    return response.choices[0].message.content.strip()
 
 
 # ─────────────────────────────────────────────

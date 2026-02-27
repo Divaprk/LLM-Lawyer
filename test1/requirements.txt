@@ -10,7 +10,8 @@ chromadb==0.5.3
 rank_bm25==0.2.2
 
 # Phase 3 — LLM + Chatbot UI
-ollama>=0.2.0
+openai>=1.0.0
+python-dotenv>=1.0.0
 streamlit>=1.35.0
 
 # Optional: only needed if re-scraping eLitigation (requires Chrome installed)
