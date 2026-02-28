@@ -35,10 +35,23 @@ from datetime import datetime
 # ─────────────────────────────────────────────
 
 # Input chunk files — update paths if yours differ
+# Keys are arbitrary labels; source_type comes from the chunk data itself.
 CHUNK_FILES = {
-    "statute":   "data/chunks/employment_act.jsonl",
-    "guideline": "data/chunks/singapore_legal_advice.jsonl",
-    "case":      "data/chunks/elitigation_cases.jsonl",
+    "statute_ea":    "data/chunks/employment_act.jsonl",
+    "statute_cpf":   "data/chunks/cpf_act.jsonl",
+    "statute_wica":  "data/chunks/wica.jsonl",
+    "statute_cdca":  "data/chunks/child_development_act.jsonl",
+    "statute_rra":   "data/chunks/retirement_reemployment_act.jsonl",
+    "statute_wsha":  "data/chunks/wsha.jsonl",
+    "statute_pdpa":  "data/chunks/pdpa.jsonl",
+    "statute_efma":  "data/chunks/efma.jsonl",
+    "statute_wfa":   "data/chunks/workplace_fairness_act.jsonl",
+    "statute_ira":   "data/chunks/industrial_relations_act.jsonl",
+    "guideline_sla": "data/chunks/singapore_legal_advice.jsonl",
+    "guideline_ts":  "data/chunks/tafep_tripartite_standards.jsonl",
+    "guideline_fwa": "data/chunks/tg_fwar_guidelines.jsonl",
+    "guideline_wr":  "data/chunks/workright_guide.jsonl",
+    "case":          "data/chunks/elitigation_cases.jsonl",
 }
 
 # Output paths
@@ -191,7 +204,7 @@ def split_large_chunks(chunks: list[dict]) -> list[dict]:
 
             if source_type == "statute":
                 prefix = (
-                    f"Employment Act 1968, {chunk.get('part','')}, "
+                    f"{chunk.get('act_name', 'Employment Act')}, {chunk.get('part','')}, "
                     f"Section {chunk.get('section','')} — {chunk.get('section_title','')}:"
                 )
             elif source_type == "guideline":
@@ -347,13 +360,16 @@ def _build_metadata(chunk: dict) -> dict:
 
     if chunk.get("source_type") == "statute":
         meta.update({
-            "act_name":      chunk.get("act_name", ""),
-            "part":          chunk.get("part", ""),
-            "section":       chunk.get("section", ""),
-            "section_title": chunk.get("section_title", ""),
-            "is_repealed":   chunk.get("is_repealed", False),
+            "act_name":           chunk.get("act_name", ""),
+            "part":               chunk.get("part", ""),
+            "section":            chunk.get("section", ""),
+            "section_title":      chunk.get("section_title", ""),
+            "is_repealed":        chunk.get("is_repealed", False),
             # cross_refs is a list — join to string for ChromaDB
-            "cross_refs":    ", ".join(chunk.get("cross_refs", [])),
+            "cross_refs":         ", ".join(chunk.get("cross_refs", [])),
+            # WFA grace period fields (empty string for other acts)
+            "enforcement_status": chunk.get("enforcement_status", ""),
+            "enforceable_from":   chunk.get("enforceable_from", ""),
         })
 
     elif chunk.get("source_type") == "guideline":

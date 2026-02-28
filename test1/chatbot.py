@@ -62,10 +62,23 @@ RULES YOU MUST FOLLOW:
 1. Base your answer ONLY on the retrieved context provided. Do not use outside knowledge.
 2. Always cite your source. Use this exact format:
    - For Employment Act sections: [Employment Act s.{number}]
+   - For CPF Act sections: [CPF Act s.{number}]
+   - For Work Injury Compensation Act sections: [WICA s.{number}]
+   - For Child Development Co-Savings Act sections: [CDCA s.{number}]
+   - For Retirement and Re-employment Act sections: [RRA s.{number}]
+   - For Workplace Safety and Health Act sections: [WSHA s.{number}]
+   - For Personal Data Protection Act sections: [PDPA s.{number}]
+   - For Employment of Foreign Manpower Act sections: [EFMA s.{number}]
+   - For Workplace Fairness Act sections: [WFA s.{number}]
+   - For Industrial Relations Act sections: [IRA s.{number}]
+   - For TAFEP Tripartite Standards: [TS: {standard title}]
+   - For Tripartite Guidelines on FWA Requests: [TG-FWAR: {section title}]
+   - For WorkRight Guide sections: [WorkRight: {section title}]
    - For SLA articles: [SingaporeLegalAdvice: {article title}]
    - For court cases: [Case: {case name}]
-3. If the retrieved context does not contain enough information to answer the question, say exactly: "I'm sorry, I don't have enough information in my knowledge base to answer this question. Please consult a lawyer or visit mom.gov.sg for official guidance."
-4. Never give a definitive legal ruling. Use language like "under the Employment Act...", "according to...", "you may be entitled to...". You are providing general legal information, not legal advice.
+3. IMPORTANT — Workplace Fairness Act (WFA) grace period: The Workplace Fairness Act 2025 was passed by Parliament but is in a grace period. It is NOT fully enforceable until 2027. If you cite any section of the WFA, you MUST add this disclaimer immediately after: "(Note: The Workplace Fairness Act 2025 is currently in a grace period and will only be fully enforceable from 2027.)"
+4. If the retrieved context does not contain enough information to answer the question, say exactly: "I'm sorry, I don't have enough information in my knowledge base to answer this question. Please consult a lawyer or visit mom.gov.sg for official guidance."
+5. Never give a definitive legal ruling. Use language like "under the Employment Act...", "according to...", "you may be entitled to...". You are providing general legal information, not legal advice.
 
 FORMAT:
 - Use plain, simple English that a non-lawyer can understand.
@@ -230,36 +243,141 @@ def verify_citations(answer: str, retrieved_chunks: list[dict]) -> tuple[str, li
     warnings = []
 
     # ── Extract all citations from the answer ──
-    ea_citations  = re.findall(r"\[Employment Act s\.(\w+)\]", answer)
-    case_citations = re.findall(r"\[Case:\s*([^\]]+)\]", answer)
-    sla_citations  = re.findall(r"\[SingaporeLegalAdvice:\s*([^\]]+)\]", answer)
+    ea_citations     = re.findall(r"\[Employment Act s\.(\w+)\]", answer)
+    cpf_citations    = re.findall(r"\[CPF Act s\.(\w+)\]", answer)
+    wica_citations   = re.findall(r"\[WICA s\.(\w+)\]", answer)
+    cdca_citations   = re.findall(r"\[CDCA s\.(\w+)\]", answer)
+    rra_citations    = re.findall(r"\[RRA s\.(\w+)\]", answer)
+    wsha_citations   = re.findall(r"\[WSHA s\.(\w+)\]", answer)
+    pdpa_citations   = re.findall(r"\[PDPA s\.(\w+)\]", answer)
+    efma_citations   = re.findall(r"\[EFMA s\.(\w+)\]", answer)
+    wfa_citations    = re.findall(r"\[WFA s\.(\w+)\]", answer)
+    ira_citations    = re.findall(r"\[IRA s\.(\w+)\]", answer)
+    ts_citations     = re.findall(r"\[TS:\s*([^\]]+)\]", answer)
+    tgfwar_citations   = re.findall(r"\[TG-FWAR:\s*([^\]]+)\]", answer)
+    workright_citations= re.findall(r"\[WorkRight:\s*([^\]]+)\]", answer)
+    case_citations     = re.findall(r"\[Case:\s*([^\]]+)\]", answer)
+    sla_citations      = re.findall(r"\[SingaporeLegalAdvice:\s*([^\]]+)\]", answer)
 
     # ── Build sets of what's actually in retrieved chunks ──
-    retrieved_ea_sections = set()
-    retrieved_cases       = set()
-    retrieved_sla_titles  = set()
+    # statute chunks keyed by (act_name_lower, section_lower)
+    retrieved_statutes: dict[str, set] = {}   # act_name_key -> set of section strings
+    retrieved_cases    = set()
+    retrieved_sla_titles = set()
+    retrieved_ts_titles  = set()
+
+    ACT_KEYS = {
+        "employment act":                    "ea",
+        "central provident fund act":        "cpf",
+        "work injury compensation act":      "wica",
+        "child development co-savings act":  "cdca",
+        "retirement and re-employment act":  "rra",
+        "workplace safety and health act":   "wsha",
+        "personal data protection act":      "pdpa",
+        "employment of foreign manpower act":"efma",
+        "workplace fairness act":            "wfa",
+        "industrial relations act":          "ira",
+    }
 
     for r in retrieved_chunks:
         meta = r.get("metadata", {})
         src  = meta.get("source_type", "")
 
         if src == "statute":
-            retrieved_ea_sections.add(meta.get("section", "").lower())
+            act_name = meta.get("act_name", "").lower()
+            section  = meta.get("section", "").lower()
+            for act_fragment, key in ACT_KEYS.items():
+                if act_fragment in act_name:
+                    retrieved_statutes.setdefault(key, set()).add(section)
 
         elif src == "case":
-            case_name = meta.get("case_name", "").lower()
-            # Add partial matches (case names can be truncated in citations)
-            retrieved_cases.add(case_name)
+            retrieved_cases.add(meta.get("case_name", "").lower())
 
         elif src == "guideline":
-            title = meta.get("title", "").lower()
-            retrieved_sla_titles.add(title)
+            title    = meta.get("title", "").lower()
+            category = meta.get("category", "").lower()
+            if "tripartite standard" in category:
+                retrieved_ts_titles.add(title)
+            else:
+                retrieved_sla_titles.add(title)
 
     # ── Verify each citation ──
-    for sec in ea_citations:
-        if sec.lower() not in retrieved_ea_sections:
+    def _statute_warn(label: str, sec: str, act_key: str):
+        if sec.lower() not in retrieved_statutes.get(act_key, set()):
             warnings.append(
-                f"⚠️ Citation [Employment Act s.{sec}] could not be verified "
+                f"⚠️ Citation [{label} s.{sec}] could not be verified "
+                f"against retrieved sources."
+            )
+
+    for sec in ea_citations:
+        _statute_warn("Employment Act", sec, "ea")
+    for sec in cpf_citations:
+        _statute_warn("CPF Act", sec, "cpf")
+    for sec in wica_citations:
+        _statute_warn("WICA", sec, "wica")
+    for sec in cdca_citations:
+        _statute_warn("CDCA", sec, "cdca")
+    for sec in rra_citations:
+        _statute_warn("RRA", sec, "rra")
+    for sec in wsha_citations:
+        _statute_warn("WSHA", sec, "wsha")
+    for sec in pdpa_citations:
+        _statute_warn("PDPA", sec, "pdpa")
+    for sec in efma_citations:
+        _statute_warn("EFMA", sec, "efma")
+    for sec in wfa_citations:
+        _statute_warn("WFA", sec, "wfa")
+    for sec in ira_citations:
+        _statute_warn("IRA", sec, "ira")
+
+    # WFA grace period programmatic notice
+    if wfa_citations:
+        warnings.append(
+            "ℹ️ The Workplace Fairness Act 2025 is currently in a grace period "
+            "and will only be fully enforceable from 2027. Employers are encouraged "
+            "to comply early, but enforcement has not yet commenced."
+        )
+
+    for title in ts_citations:
+        title_lower = title.lower().strip()
+        found = any(title_lower in rt or rt in title_lower for rt in retrieved_ts_titles)
+        if not found:
+            warnings.append(
+                f"⚠️ Citation [TS: {title}] could not be verified "
+                f"against retrieved sources."
+            )
+
+    # Build TG-FWAR title set from retrieved guideline chunks
+    retrieved_tgfwar_titles: set = set()
+    for r in retrieved_chunks:
+        meta = r.get("metadata", {})
+        if (meta.get("source_type") == "guideline"
+                and "tripartite guideline" in meta.get("category", "").lower()):
+            retrieved_tgfwar_titles.add(meta.get("title", "").lower())
+
+    for title in tgfwar_citations:
+        title_lower = title.lower().strip()
+        found = any(title_lower in rt or rt in title_lower for rt in retrieved_tgfwar_titles)
+        if not found:
+            warnings.append(
+                f"⚠️ Citation [TG-FWAR: {title}] could not be verified "
+                f"against retrieved sources."
+            )
+
+    # WorkRight guide citations
+    retrieved_wr_titles: set = set()
+    for r in retrieved_chunks:
+        meta = r.get("metadata", {})
+        if (meta.get("source_type") == "guideline"
+                and "workright" in meta.get("category", "").lower()):
+            retrieved_wr_titles.add(meta.get("title", "").lower())
+
+    for title in workright_citations:
+        title_lower = title.lower().strip()
+        found = any(title_lower in rt or rt in title_lower for rt in retrieved_wr_titles)
+        if not found:
+            warnings.append(
+                f"⚠️ Citation [WorkRight: {title}] could not be verified "
                 f"against retrieved sources."
             )
 
@@ -296,6 +414,18 @@ def format_citations_for_display(text: str) -> str:
     citation_pattern = re.compile(
         r'\[(?:'
         r'Employment Act s\.\w+'
+        r'|CPF Act s\.\w+'
+        r'|WICA s\.\w+'
+        r'|CDCA s\.\w+'
+        r'|RRA s\.\w+'
+        r'|WSHA s\.\w+'
+        r'|PDPA s\.\w+'
+        r'|EFMA s\.\w+'
+        r'|WFA s\.\w+'
+        r'|IRA s\.\w+'
+        r'|TS:\s*[^\]]+'
+        r'|TG-FWAR:\s*[^\]]+'
+        r'|WorkRight:\s*[^\]]+'
         r'|SingaporeLegalAdvice:\s*[^\]]+'
         r'|Case:\s*[^\]]+'
         r')\]'
@@ -413,10 +543,20 @@ def build_context_block(chunks: list[dict]) -> str:
         text = chunk.get("text", "")[:2000]  # cap per chunk to control prompt length
 
         if src == "statute":
-            label = (f"[SOURCE {i}] Employment Act s.{meta.get('section','')} "
+            act_name = meta.get("act_name", "Employment Act")
+            label = (f"[SOURCE {i}] {act_name} s.{meta.get('section','')} "
                      f"— {meta.get('section_title','')}")
         elif src == "guideline":
-            label = f"[SOURCE {i}] SingaporeLegalAdvice: {meta.get('title','')}"
+            category = meta.get("category", "")
+            title    = meta.get("title", "")
+            if "Tripartite Standard" in category:
+                label = f"[SOURCE {i}] TS: {title}"
+            elif "Tripartite Guideline" in category:
+                label = f"[SOURCE {i}] TG-FWAR: {title}"
+            elif "WorkRight" in category:
+                label = f"[SOURCE {i}] WorkRight: {title}"
+            else:
+                label = f"[SOURCE {i}] SingaporeLegalAdvice: {title}"
         elif src == "case":
             label = (f"[SOURCE {i}] Case: {meta.get('case_name','')} "
                      f"({meta.get('court','')}, {meta.get('year','')})")
@@ -607,9 +747,17 @@ def run_streamlit():
                             meta = chunk.get("metadata", {})
                             src  = meta.get("source_type", "")
                             if src == "statute":
-                                label = f"s.{meta.get('section','')} — {meta.get('section_title','')}"
+                                act = meta.get("act_name", "Statute")
+                                label = f"{act} s.{meta.get('section','')} — {meta.get('section_title','')}"
                             elif src == "guideline":
-                                label = meta.get("title", "")
+                                label    = meta.get("title", "")
+                                category = meta.get("category", "")
+                                if category == "Tripartite Standard":
+                                    label = f"[TS] {label}"
+                                elif category == "Tripartite Guideline":
+                                    label = f"[TG-FWAR] {label}"
+                                elif category == "WorkRight Guide":
+                                    label = f"[WorkRight] {label}"
                             elif src == "case":
                                 label = meta.get("case_name", "")[:60]
                             else:

@@ -46,12 +46,30 @@ FINAL_TOP_K  = 5
 RRF_K = 60
 
 # Source-type score multipliers applied after RRF merge.
-# Statutes are boosted because they make up only ~8% of the corpus
-# (226 of 2886 chunks) and are chronically under-retrieved without help.
+#
+# Corpus breakdown (post Phase 2 rebuild, 4392 chunks):
+#   statute:   1670 (38%)  — 10 acts, avg ~1.95 sub-chunks per section
+#   guideline:  809 (18%)  — SLA + TAFEP TS + TG-FWAR + WorkRight, avg ~8x split
+#   case:      1913 (44%)  — 97 original judgments, avg ~20x sub-chunks each
+#
+# Rationale:
+#   statute  2.0 — reduced from 3.0 because statutes now sit at 38% of corpus
+#                  (previously 8%). Still need an edge to win against cases on
+#                  direct legal-provision questions (e.g. "what does s.38 say?").
+#
+#   guideline 1.5 — modest boost: guidelines (TS, TG-FWAR, WorkRight) give
+#                  actionable employer/employee guidance. At 18% they compete
+#                  fairly but benefit from a nudge on process/best-practice queries.
+#
+#   case      0.8 — slight de-boost to correct for ~20x sub-chunking inflation.
+#                  A single judgment produces ~20 nearly-identical sub-chunks that
+#                  all score similarly, crowding out statutes and guidelines.
+#                  Keeping it at 0.8 (not lower) preserves case relevance for
+#                  applied-law and wrongful-dismissal questions.
 SOURCE_WEIGHTS = {
-    "statute":   3.0,   # Employment Act sections — heavily underrepresented
-    "guideline": 1.0,   # SingaporeLegalAdvice — baseline
-    "case":      1.0,   # eLitigation — 66% of corpus, no boost needed
+    "statute":   2.0,
+    "guideline": 1.5,
+    "case":      0.8,
 }
 
 # BGE query prefix — required for BGE models at query time
@@ -147,6 +165,30 @@ TOPIC_KEYWORDS = {
     ],
     "work injury": [
         "injured at work", "workplace accident", "wica", "compensation for injury"
+    ],
+    "workplace safety": [
+        "safety", "health", "wsha", "hazard", "dangerous", "accident at work",
+        "workplace injury", "occupational", "risk assessment", "safe work"
+    ],
+    "data protection": [
+        "pdpa", "personal data", "data protection", "privacy", "data breach",
+        "collect data", "employee data", "personal information"
+    ],
+    "foreign worker": [
+        "work pass", "foreign worker", "efma", "ep holder", "employment pass",
+        "s pass", "work permit", "foreign employee", "expatriate", "foreigner"
+    ],
+    "flexible work arrangement": [
+        "fwa", "flexi", "flexible work", "work from home", "remote work",
+        "flexible hours", "part time", "reduced hours", "flexi-place", "flexi-load"
+    ],
+    "workplace fairness": [
+        "workplace fairness", "wfa", "discrimination", "fair hiring", "fcf",
+        "fair consideration", "protected characteristic", "workplace bias"
+    ],
+    "industrial relations": [
+        "union", "trade union", "collective agreement", "collective bargaining",
+        "industrial action", "strike", "industrial relations act", "ira"
     ],
 }
 
@@ -389,6 +431,10 @@ TEST_QUERIES = [
     "My salary has not been paid for 2 months, what can I do?",
     "What does section 38 say about hours of work?",
     "I was retrenched, am I entitled to retrenchment benefit?",
+    "Can I request to work from home under flexible work arrangements?",
+    "My employer collected my personal data without consent, what are my rights?",
+    "I was injured at work, can I claim compensation?",
+    "What protections do foreign workers have in Singapore?",
 ]
 
 def run_test():
@@ -409,9 +455,9 @@ def run_test():
 
             # Build a source label
             if src == "statute":
-                label = f"Employment Act s.{meta.get('section','')} — {meta.get('section_title','')}"
+                label = f"{meta.get('act_name','Statute')} s.{meta.get('section','')} — {meta.get('section_title','')}"
             elif src == "guideline":
-                label = f"SLA: {meta.get('title','')[:50]}"
+                label = f"{meta.get('category','Guide')}: {meta.get('title','')[:50]}"
             elif src == "case":
                 label = f"Case: {meta.get('case_name','')[:50]}"
             else:
