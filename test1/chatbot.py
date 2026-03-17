@@ -457,6 +457,102 @@ def format_citations_for_display(text: str) -> str:
 # FEATURE 5: Conversation Memory
 # ─────────────────────────────────────────────
 
+INTAKE_CLASSIFIER_PROMPT = """You are a Singapore employment law intake assistant.
+
+A user has asked: "{query}"
+
+Their known context so far: "{context}"
+
+Your job:
+1. Classify the query topic into ONE of these categories:
+   - termination (fired, dismissed, notice period, wrongful dismissal)
+   - salary_dispute (unpaid salary, deductions, overtime pay)
+   - leave (annual leave, sick leave, maternity/paternity leave)
+   - workplace_safety (injury, accident, WSHA, unsafe conditions)
+   - discrimination (unfair treatment, WFA, TAFEP, protected characteristics)
+   - contract (employment contract terms, probation, restraint of trade)
+   - cpf (CPF contributions, withdrawal, shortfall)
+   - flexible_work (FWA request, work from home, flexible hours)
+   - reemployment (retirement age, re-employment obligation, RRA)
+   - foreign_worker (work pass, EP, S Pass, EFMA)
+   - general (unclear or multiple topics)
+
+2. Based on the topic, return ONLY the 2-3 most important clarifying questions needed to answer accurately.
+   - Skip any question whose answer is already known from the context.
+   - Questions must be specific and directly affect which law/entitlement applies.
+   - Do NOT ask generic questions unrelated to the topic.
+
+Topic-to-question mapping examples (use as guidance, adapt as needed):
+- termination → job type (workman vs executive affects EA coverage), employment duration (affects severance), written contract (affects notice period)
+- salary_dispute → salary amount (affects whether EA Part III applies), payment frequency, how long unpaid
+- leave → employment duration (affects entitlement days), leave type needed, whether currently employed
+- workplace_safety → nature of injury/hazard, employer size, whether incident reported
+- discrimination → protected characteristic involved, whether formal complaint made, company size
+- cpf → employment type (employee vs self-employed), whether employer has been paying, duration of shortfall
+- flexible_work → reason for request, how long employed, whether request was in writing
+- reemployment → current age, whether employer offered re-employment, previous role
+- foreign_worker → pass type (EP/S Pass/WP), employer industry, issue type
+- general → ask what the main issue is and employment type
+
+Return ONLY a JSON object like this (no other text):
+{{
+  "topic": "<category>",
+  "questions": ["Question 1?", "Question 2?"]
+}}"""
+
+
+def situation_intake(query: str, memory) -> list[str]:
+    """
+    Dynamically generate clarifying questions based on the user's query topic.
+    Uses LLM to classify intent and select relevant questions.
+    Skips questions already answered in memory.user_context.
+    Returns [] if no clarification needed (e.g. casual chat, already has context).
+    """
+    # Don't ask intake questions for greetings or very short inputs
+    if len(query.strip().split()) <= 2:
+        return []
+
+    # Don't ask intake questions if we already have sufficient context
+    known_facts = memory.user_context
+    known_count = known_facts.count(";") + (1 if known_facts else 0)
+    if known_count >= 2:
+        return []
+
+    prompt = INTAKE_CLASSIFIER_PROMPT.format(
+        query=query,
+        context=known_facts if known_facts else "None"
+    )
+
+    try:
+        raw = _call_llm([{"role": "user", "content": prompt}], max_tokens=300)
+        # Strip markdown fences if present
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = json.loads(raw)
+        questions = parsed.get("questions", [])
+
+        # Filter out questions whose answers are already in context
+        context_lower = known_facts.lower()
+        filtered = []
+        for q in questions:
+            q_lower = q.lower()
+            # Skip if answer keywords already exist in context
+            if "job type" in q_lower and "job type:" in context_lower:
+                continue
+            if ("long" in q_lower or "duration" in q_lower or "how long" in q_lower) and "employment duration:" in context_lower:
+                continue
+            if "contract" in q_lower and "written contract:" in context_lower:
+                continue
+            if "salary" in q_lower and "salary:" in context_lower:
+                continue
+            filtered.append(q)
+
+        return filtered[:3]  # cap at 3 questions max
+
+    except Exception as e:
+        print(f"  [WARN] Situation intake LLM call failed: {e}")
+        return []
+
+
 class ConversationMemory:
     """
     Keeps the last MEMORY_TURNS messages in context.
@@ -516,6 +612,12 @@ class ConversationMemory:
         elif re.search(r"\bmanager\b|\bexecutive\b|\bdirector\b", user_message, re.IGNORECASE):
             facts.append("job type: managerial/executive")
 
+        # Written contract (was mistakenly outside the save block before)
+        if re.search(r"\bwritten contract\b|\bsigned contract\b|\bemployment contract\b|\boffer letter\b|\bhave a contract\b", user_message, re.IGNORECASE):
+            facts.append("written contract: yes")
+        elif re.search(r"\bno contract\b|\bdidn't sign\b|\bdid not sign\b|\bverbal agreement\b", user_message, re.IGNORECASE):
+            facts.append("written contract: no")
+
         if facts:
             # Append new facts, avoid duplicates
             new_context = "; ".join(facts)
@@ -525,6 +627,7 @@ class ConversationMemory:
     def clear(self):
         self.history      = []
         self.user_context = ""
+        
 
 
 # ─────────────────────────────────────────────
@@ -568,6 +671,62 @@ def build_context_block(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+CONTEXT_EXTRACT_PROMPT = """You are extracting key employment facts from a user's message.
+
+User said: "{message}"
+
+Extract any of these facts if mentioned (return null if not mentioned):
+- job_type: their role/type (e.g. "clerk", "manager", "workman", "executive", "engineer")
+- employment_duration: how long they worked (e.g. "3 years", "6 months")
+- written_contract: do they have a written contract? (yes/no)
+- salary: their salary amount (e.g. "$2,500/month")
+- still_employed: are they currently still working there? (yes/no)
+
+Return ONLY a JSON object, no other text:
+{{"job_type": null, "employment_duration": null, "written_contract": null, "salary": null, "still_employed": null}}"""
+
+
+def _llm_extract_context(query: str, memory) -> None:
+    """
+    Use LLM to extract facts from free-text answers (e.g. responses to clarifying questions).
+    Updates memory.user_context with any new facts found.
+    Only runs if the query looks like an answer to a clarifying question (short, factual).
+    """
+    # Only run on shorter replies that look like answers, not full questions
+    word_count = len(query.strip().split())
+    if word_count > 40:
+        return
+
+    try:
+        raw = _call_llm(
+            [{"role": "user", "content": CONTEXT_EXTRACT_PROMPT.format(message=query)}],
+            max_tokens=150
+        )
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        extracted = json.loads(raw)
+
+        new_facts = []
+        ctx_lower = memory.user_context.lower()
+
+        if extracted.get("job_type") and "job type:" not in ctx_lower:
+            new_facts.append(f"job type: {extracted['job_type']}")
+        if extracted.get("employment_duration") and "employment duration:" not in ctx_lower:
+            new_facts.append(f"employment duration: {extracted['employment_duration']}")
+        if extracted.get("written_contract") and "written contract:" not in ctx_lower:
+            new_facts.append(f"written contract: {extracted['written_contract']}")
+        if extracted.get("salary") and "salary:" not in ctx_lower:
+            new_facts.append(f"salary: {extracted['salary']}")
+        if extracted.get("still_employed") and "still employed:" not in ctx_lower:
+            new_facts.append(f"still employed: {extracted['still_employed']}")
+
+        if new_facts:
+            addition = "; ".join(new_facts)
+            memory.user_context = (memory.user_context + "; " + addition).strip("; ")
+
+    except Exception as e:
+        print(f"  [WARN] LLM context extraction failed: {e}")
+
+
 def answer(
     query: str,
     memory: ConversationMemory,
@@ -581,10 +740,23 @@ def answer(
     """
     from retrieval import retrieve
 
-    # ── 1. Extract user context facts ──
+    # ── 1. Extract user context facts (regex for structured data) ──
     memory.extract_user_context(query)
 
-    # ── 2. LLM query rewriting ──
+    # ── 1b. LLM-based extraction for free-text answers ──
+    _llm_extract_context(query, memory)
+
+    # ── 2. Situation Intake (ask clarification questions before retrieval) ──
+    missing_questions = situation_intake(query, memory)
+
+    if missing_questions:
+        clarification_reply = (
+            "I need a few details before I can answer more accurately:\n\n- "
+            + "\n- ".join(missing_questions)
+        )
+        return clarification_reply, [], []
+
+    # ── 3. LLM query rewriting ──
     conv_context = memory.get_context_string()
     effective_query = rewrite_query_llm(query, conv_context)
     if verbose:
@@ -594,10 +766,10 @@ def answer(
     if memory.user_context:
         effective_query += f" {memory.user_context}"
 
-    # ── 3. Hybrid retrieval ──
+    # ── 4. Hybrid retrieval ──
     raw_results = retrieve(effective_query, top_k=TOP_K_RETRIEVE, rewrite=False)
 
-    # ── 4. Parent-document escalation ──
+    # ── 5. Parent-document escalation ──
     results = escalate_to_parent(raw_results)
 
     if verbose:
@@ -606,7 +778,7 @@ def answer(
             m = r.get("metadata", {})
             print(f"    {m.get('source_type','')} | s.{m.get('section','')} {m.get('title',m.get('case_name',''))[:40]} | score={r.get('rrf_score',0):.4f}")
 
-    # ── 5. Build prompt ──
+    # ── 6. Build prompt ──
     context_block = build_context_block(results)
     user_content  = f"""User question: {query}
 
