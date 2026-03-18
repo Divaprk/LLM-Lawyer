@@ -477,26 +477,28 @@ Your job:
    - foreign_worker (work pass, EP, S Pass, EFMA)
    - general (unclear or multiple topics)
 
-2. Based on the topic, return ONLY the 2-3 most important clarifying questions needed to answer accurately.
-   - Skip any question whose answer is already known from the context.
-   - Questions must be specific and directly affect which law/entitlement applies.
-   - Do NOT ask generic questions unrelated to the topic.
+2. Decide if clarifying questions are ACTUALLY NEEDED by asking: would the answer meaningfully change based on the user's personal details?
 
-Topic-to-question mapping examples (use as guidance, adapt as needed):
-- termination → job type (workman vs executive affects EA coverage), employment duration (affects severance), written contract (affects notice period)
-- salary_dispute → salary amount (affects whether EA Part III applies), payment frequency, how long unpaid
-- leave → employment duration (affects entitlement days), leave type needed, whether currently employed
-- workplace_safety → nature of injury/hazard, employer size, whether incident reported
-- discrimination → protected characteristic involved, whether formal complaint made, company size
-- cpf → employment type (employee vs self-employed), whether employer has been paying, duration of shortfall
-- flexible_work → reason for request, how long employed, whether request was in writing
-- reemployment → current age, whether employer offered re-employment, previous role
-- foreign_worker → pass type (EP/S Pass/WP), employer industry, issue type
-- general → ask what the main issue is and employment type
+Set "intake_needed": false if:
+   - The answer is the same regardless of job type, salary, or duration (e.g. general working hours limits, notice period rules, what a law says)
+   - The question is asking what the law says in general ("is X legal?", "what does section X say?", "what are my rights regarding X?")
+   - The user is asking for a general explanation or overview
+   - Enough context is already known
+
+Set "intake_needed": true ONLY if:
+   - The answer changes significantly based on job type (workman vs executive)
+   - The entitlement amount depends on employment duration (e.g. severance, leave days)
+   - EA coverage depends on salary amount (e.g. salary dispute, overtime claims)
+   - The user's specific situation (fired, injured, underpaid) requires personalised advice
+
+3. If intake_needed is true, return 2-3 clarifying questions. Otherwise return an empty list.
+   - Skip any question whose answer is already known from the context.
+   - Questions must directly affect which law or entitlement applies.
 
 Return ONLY a JSON object like this (no other text):
 {{
   "topic": "<category>",
+  "intake_needed": true,
   "questions": ["Question 1?", "Question 2?"]
 }}"""
 
@@ -528,6 +530,11 @@ def situation_intake(query: str, memory) -> list[str]:
         # Strip markdown fences if present
         raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         parsed = json.loads(raw)
+
+        # Skip intake entirely if the LLM says it's not needed
+        if not parsed.get("intake_needed", True):
+            return []
+
         questions = parsed.get("questions", [])
 
         # Filter out questions whose answers are already in context
@@ -571,6 +578,7 @@ class ConversationMemory:
         self.max_turns    = max_turns
         self.history: list[dict] = []  # [{"role": "user"|"assistant", "content": "..."}]
         self.user_context = ""         # extracted facts about the user's situation
+        self.pending_query = ""        # original question saved while waiting for intake answers
 
     def add_turn(self, role: str, content: str):
         self.history.append({"role": role, "content": content})
@@ -627,6 +635,7 @@ class ConversationMemory:
     def clear(self):
         self.history      = []
         self.user_context = ""
+        self.pending_query = ""
         
 
 
@@ -750,17 +759,24 @@ def answer(
     missing_questions = situation_intake(query, memory)
 
     if missing_questions:
+        # Save the original question so retrieval uses it once the user answers
+        if not memory.pending_query:
+            memory.pending_query = query
         clarification_reply = (
             "I need a few details before I can answer more accurately:\n\n- "
             + "\n- ".join(missing_questions)
         )
         return clarification_reply, [], []
 
+    # If user just answered our clarifying questions, retrieve against the original question
+    effective_question = memory.pending_query if memory.pending_query else query
+    memory.pending_query = ""  # clear it now that we're proceeding
+
     # ── 3. LLM query rewriting ──
     conv_context = memory.get_context_string()
-    effective_query = rewrite_query_llm(query, conv_context)
+    effective_query = rewrite_query_llm(effective_question, conv_context)
     if verbose:
-        print(f"  [REWRITE] {query!r}\n        → {effective_query!r}")
+        print(f"  [REWRITE] {effective_question!r}\n        → {effective_query!r}")
 
     # Append known user context to improve retrieval
     if memory.user_context:
@@ -780,7 +796,7 @@ def answer(
 
     # ── 6. Build prompt ──
     context_block = build_context_block(results)
-    user_content  = f"""User question: {query}
+    user_content  = f"""User question: {effective_question}
 
 Retrieved context:
 {context_block}
