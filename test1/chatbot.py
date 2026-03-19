@@ -428,6 +428,89 @@ def verify_citations(answer: str, retrieved_chunks: list[dict]) -> tuple[str, li
 
     return answer, warnings
 
+# ─────────────────────────────────────────────
+# FEATURE 6: Confidence Scoring
+# ─────────────────────────────────────────────
+
+def compute_confidence_score(
+    retrieved_chunks: list[dict],
+    verified_answer: str,
+    warnings: list[str],
+) -> dict:
+    """
+    Compute a confidence score (0–100) for the generated answer.
+
+    Factors considered:
+      1. Retrieval quality  — average RRF score of top chunks (higher = better match)
+      2. Source diversity   — mixture of statutes, cases, guidelines is more reliable
+      3. Citation warnings  — each unverified citation penalises the score
+      4. Answer length      — very short answers may indicate low-confidence fallbacks
+
+    Returns a dict:
+        {
+            "score": int (0–100),
+            "label": "High" | "Medium" | "Low",
+            "color": "green" | "orange" | "red",
+            "breakdown": { ... individual sub-scores for debugging }
+        }
+    """
+    if not retrieved_chunks:
+        return {
+            "score": 0,
+            "label": "Low",
+            "color": "red",
+            "breakdown": {"reason": "No chunks retrieved"},
+        }
+
+    # ── Sub-score 1: Retrieval quality (0–40 pts) ──
+    # RRF scores are typically in the 0.01–0.07 range; we normalise against 0.06 as a ceiling
+    scores = [c.get("rrf_score", 0) for c in retrieved_chunks]
+    avg_score = sum(scores) / len(scores) if scores else 0
+    RRF_CEILING = 0.06
+    retrieval_pts = min(40, int((avg_score / RRF_CEILING) * 40))
+
+    # ── Sub-score 2: Source diversity (0–25 pts) ──
+    source_types = {c.get("metadata", {}).get("source_type", "unknown") for c in retrieved_chunks}
+    diversity_pts = min(25, len(source_types) * 8)   # 1 type=8, 2=16, 3+=24 (capped at 25)
+
+    # ── Sub-score 3: Citation penalty (–10 per unverified warning) ──
+    unverified_warnings = [w for w in warnings if "could not be verified" in w]
+    citation_penalty = min(30, len(unverified_warnings) * 10)
+
+    # ── Sub-score 4: Answer completeness (0–15 pts) ──
+    word_count = len(verified_answer.split())
+    if word_count >= 80:
+        completeness_pts = 15
+    elif word_count >= 40:
+        completeness_pts = 8
+    else:
+        completeness_pts = 0   # very short = likely a fallback/refusal
+
+    raw = retrieval_pts + diversity_pts + completeness_pts - citation_penalty
+    final_score = max(0, min(100, raw))
+
+    if final_score >= 70:
+        label, color = "High", "green"
+    elif final_score >= 40:
+        label, color = "Medium", "orange"
+    else:
+        label, color = "Low", "red"
+
+    return {
+        "score": final_score,
+        "label": label,
+        "color": color,
+        "breakdown": {
+            "retrieval_pts": retrieval_pts,
+            "diversity_pts": diversity_pts,
+            "completeness_pts": completeness_pts,
+            "citation_penalty": -citation_penalty,
+            "chunks_retrieved": len(retrieved_chunks),
+            "avg_rrf_score": round(avg_score, 5),
+            "source_types": list(source_types),
+        },
+    }
+
 def calculate_employment_payments(data: dict) -> str:
     """
     Deterministic calculation for PH and OT pay.
@@ -838,7 +921,7 @@ def answer(
             "I need a few details before I can answer more accurately:\n\n- "
             + "\n- ".join(missing_questions)
         )
-        return clarification_reply, [], []
+        return clarification_reply, [], [], {"score": 0, "label": "Low", "color": "red", "breakdown": {"reason": "Awaiting clarification"}}
 
     # If user just answered our clarifying questions, retrieve against the original question
     effective_question = memory.pending_query if memory.pending_query else query
@@ -910,11 +993,16 @@ Answer the question based ONLY on the context above. Cite each source used."""
     # ── 7. Citation verification ──
     verified_answer, warnings = verify_citations(llm_answer, results)
 
-    # ── 8. Update conversation memory ──
+    # ── 8. Confidence scoring ──
+    confidence = compute_confidence_score(results, verified_answer, warnings)
+    if verbose:
+        print(f"  [CONFIDENCE] Score={confidence['score']} ({confidence['label']}) | breakdown={confidence['breakdown']}")
+
+    # ── 9. Update conversation memory ──
     memory.add_turn("user", query)          # store original query (not rewritten)
     memory.add_turn("assistant", llm_answer)
 
-    return verified_answer, warnings, results
+    return verified_answer, warnings, results, confidence
 
 
 # ─────────────────────────────────────────────
@@ -1015,7 +1103,7 @@ def run_streamlit():
         with st.chat_message("assistant"):
             with st.spinner("Searching legal database..."):
                 try:
-                    reply, warnings, chunks = answer(
+                    reply, warnings, chunks, confidence = answer(
                         user_input,
                         st.session_state.memory,
                         user_role=user_role,
@@ -1023,6 +1111,17 @@ def run_streamlit():
                     )
                     reply = format_citations_for_display(reply)
                     st.markdown(reply, unsafe_allow_html=True)
+
+                    # ── Confidence badge ──
+                    badge_color = {"green": "#2e7d32", "orange": "#e65100", "red": "#b71c1c"}[confidence["color"]]
+                    st.markdown(
+                        f'<span style="background:{badge_color};color:white;padding:3px 10px;'
+                        f'border-radius:12px;font-size:0.8rem;font-weight:600;">'
+                        f'🎯 Confidence: {confidence["label"]} ({confidence["score"]}/100)'
+                        f'</span>',
+                        unsafe_allow_html=True,
+                    )
+
                     for w in warnings:
                         st.warning(w)
 
@@ -1088,8 +1187,9 @@ def run_cli():
         print("─" * 65)
 
         try:
-            reply, warnings, chunks = answer(query, memory, verbose=True)
+            reply, warnings, chunks, confidence = answer(query, memory, verbose=True)
             print(f"\nANSWER:\n{reply}")
+            print(f"\nCONFIDENCE: {confidence['label']} ({confidence['score']}/100)")
             if warnings:
                 print("\nCITATION WARNINGS:")
                 for w in warnings:
