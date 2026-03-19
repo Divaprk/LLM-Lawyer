@@ -56,6 +56,28 @@ PROCESSED_CHUNKS_PATH = Path("data/processed_chunks.jsonl")
 # SYSTEM PROMPT
 # ─────────────────────────────────────────────
 
+def get_role_instructions(role: str) -> str:
+    """Returns specific persona and technical requirements based on user role."""
+    roles = {
+        "General Public": (
+            "PERSONA: Helpful advocate. Use clear, simple language. If a right depends on "
+            "salary or job type (Part IV), you MUST ask the user for these details immediately."
+        ),
+        "Student": (
+            "PERSONA: Technical tutor. Use academic terminology and explain the 'legal tests' "
+            "(e.g., Control Test). Cite specific sub-sections (e.g., s.38(2)(a))."
+        ),
+        "HR Staff": (
+            "PERSONA: Compliance auditor. Focus on employer liability and mandatory obligations. "
+            "Clearly distinguish between Part IV and non-Part IV employee requirements."
+        ),
+        "Lawyer": (
+            "PERSONA: Senior Counsel. Be extremely concise and technical. Use precise statutory "
+            "citations and prioritize exhaustive lists of legal exceptions."
+        )
+    }
+    return roles.get(role, roles["General Public"])
+
 SYSTEM_PROMPT = """You are a Singapore Employment Law assistant. You help members of the public understand their rights and obligations under Singapore employment law.
 
 RULES YOU MUST FOLLOW:
@@ -79,7 +101,11 @@ RULES YOU MUST FOLLOW:
 3. IMPORTANT — Workplace Fairness Act (WFA) grace period: The Workplace Fairness Act 2025 was passed by Parliament but is in a grace period. It is NOT fully enforceable until 2027. If you cite any section of the WFA, you MUST add this disclaimer immediately after: "(Note: The Workplace Fairness Act 2025 is currently in a grace period and will only be fully enforceable from 2027.)"
 4. If the user is greeting you or making casual conversation (e.g. "hello", "hi", "thanks"), respond naturally and briefly, then invite them to ask about Singapore employment law. Do NOT reference, summarise, or cite any retrieved context in this case — ignore it entirely. If the user sends nonsense, random characters, or meaningless input (e.g. "haha", "lol", "asdfgh", "???"), respond with a short, friendly message acknowledging you did not understand, and prompt them to ask a question about Singapore employment law. Do NOT reference or cite any retrieved context in this case. If the user asks something completely outside the scope of Singapore employment law (e.g. criminal law, immigration, tax, general advice unrelated to employment), do not just say you cannot help — briefly clarify that you specialise in Singapore employment law, give 2–3 examples of topics you can assist with (e.g. dismissal, leave entitlements, salary disputes, CPF, workplace safety), and invite them to ask an employment-related question. Do NOT reference or cite any retrieved context in this case either. If the user asks a legal question within scope but the retrieved context does not contain enough information to answer it, say exactly: "I'm sorry, I don't have enough information in my knowledge base to answer this question. Please consult a lawyer or visit mom.gov.sg for official guidance."
 5. Never give a definitive legal ruling. Use language like "under the Employment Act...", "according to...", "you may be entitled to...". You are providing general legal information, not legal advice.
-
+6. ROLE-BASED PRECISION: 
+   - General Public: Use simple English and prioritize immediate rights.
+   - Student: Provide technical criteria and legal definitions.
+   - HR Staff: Focus on compliance formulas (e.g., OT pay calculations) and risk.
+   - Lawyer: Provide direct statutory citations and specific exceptions with zero fluff.
 FORMAT:
 - Use plain, simple English that a non-lawyer can understand.
 - Keep answers concise — 2 to 4 short paragraphs.
@@ -401,6 +427,51 @@ def verify_citations(answer: str, retrieved_chunks: list[dict]) -> tuple[str, li
             )
 
     return answer, warnings
+
+def calculate_employment_payments(data: dict) -> str:
+    """
+    Deterministic calculation for PH and OT pay.
+    Formula: (12 * Monthly Basic) / (52 * 44) for Hourly Rate.
+    Formula: (12 * Monthly Basic) / (52 * Days Per Week) for Daily Rate.
+    """
+    try:
+        salary = float(str(data.get("salary", 0)).replace(",", "").replace("$", ""))
+        days_per_week = float(data.get("work_days_per_week", 5))
+        
+        # Calculate Daily Rate (for Public Holidays)
+        daily_rate = (12 * salary) / (52 * days_per_week)
+        
+        # Calculate Hourly Rate (for Overtime)
+        # Standard work week is 44 hours in Singapore
+        hourly_rate = (12 * salary) / (52 * 44)
+        
+        results = []
+        if data.get("ph_worked"):
+            ph_pay = daily_rate * float(data.get("ph_worked"))
+            results.append(f"Public Holiday Pay: ${ph_pay:.2f} (for {data['ph_worked']} days)")
+            
+        if data.get("ot_hours"):
+            # OT is 1.5x hourly rate
+            ot_pay = (hourly_rate * 1.5) * float(data.get("ot_hours"))
+            results.append(f"Overtime Pay (1.5x): ${ot_pay:.2f} (for {data['ot_hours']} hours)")
+            
+        return "\n".join(results) if results else "Could not calculate: missing values."
+    except Exception as e:
+        return f"Calculation error: {str(e)}"
+    
+
+CALC_EXTRACTION_PROMPT = """
+Extract the following variables for a Singapore legal pay calculation from the text below.
+Return ONLY a JSON object. If a value is unknown, use null.
+
+Variables:
+- salary: monthly basic salary amount
+- work_days_per_week: number of days worked per week (default to 5 if not mentioned)
+- ph_worked: number of public holidays worked
+- ot_hours: number of overtime hours worked
+
+Text: "{text}"
+JSON:"""
 
 
 def format_citations_for_display(text: str) -> str:
@@ -739,6 +810,7 @@ def _llm_extract_context(query: str, memory) -> None:
 def answer(
     query: str,
     memory: ConversationMemory,
+    user_role: str = "General Public",
     verbose: bool = False,
 ) -> tuple[str, list[str], list[dict]]:
     """
@@ -771,7 +843,17 @@ def answer(
     # If user just answered our clarifying questions, retrieve against the original question
     effective_question = memory.pending_query if memory.pending_query else query
     memory.pending_query = ""  # clear it now that we're proceeding
-
+    if any(word in query.lower() for word in ["calculate", "how much", "pay", "salary", "math"]):
+        raw_calc_data = _call_llm([{"role": "user", "content": CALC_EXTRACTION_PROMPT.format(text=query + " " + memory.user_context)}])
+        try:
+            calc_json = json.loads(raw_calc_data.strip().removeprefix("```json").removesuffix("```"))
+            # Only perform math if we have enough data (salary + (PH or OT))
+            if calc_json.get("salary") and (calc_json.get("ph_worked") or calc_json.get("ot_hours")):
+                math_result = calculate_employment_payments(calc_json)
+                # Add this math result to the prompt context so the LLM can explain it
+                query += f"\n[SYSTEM CALCULATION RESULT: {math_result}]"
+        except:
+            pass # Fallback to standard RAG if extraction fails
     # ── 3. LLM query rewriting ──
     conv_context = memory.get_context_string()
     effective_query = rewrite_query_llm(effective_question, conv_context)
@@ -796,20 +878,28 @@ def answer(
 
     # ── 6. Build prompt ──
     context_block = build_context_block(results)
-    user_content  = f"""User question: {effective_question}
+    user_content  = f"""
+
+    USER BACKGROUND: {memory.user_context if memory.user_context else "None provided."}
+    
+    User question: {effective_question}
 
 Retrieved context:
 {context_block}
 
+INSTRUCTION: 
+- If User Background is 'None', identify the missing 'Binary Gate' facts (Job Type/Salary) and ask for them briefly.
+- If User Background is present, use it to filter the legal context and provide the FINAL ANSWER to the original query now.
+- Do not ask more questions once the 'Binary Gate' is cleared.
 Answer the question based ONLY on the context above. Cite each source used."""
 
     # Add user context if available
     if memory.user_context:
-        user_content = f"User background: {memory.user_context}\n\n" + user_content
-
+        user_content = f"User background: {memory.user_context}\n\n" + user_content##<<-- here change
+    role_context = get_role_instructions(user_role)
     # Build full message list: system + history + current question
     messages = (
-        [{"role": "system", "content": SYSTEM_PROMPT}]
+        [{"role": "system", "content": SYSTEM_PROMPT+ "\n\n" + role_context}]
         + memory.get_messages()
         + [{"role": "user", "content": user_content}]
     )
@@ -875,6 +965,12 @@ def run_streamlit():
     # ── Sidebar ──
     with st.sidebar:
         st.title("⚖️ SG Employment Law")
+        user_role = st.selectbox(
+            "I am a...",
+            options=["General Public", "Student", "HR Staff", "Lawyer"],
+            index=0
+        )
+        st.divider()
         st.markdown("""
 **Ask questions like:**
 - *My boss fired me without reason. What can I do?*
@@ -922,6 +1018,7 @@ def run_streamlit():
                     reply, warnings, chunks = answer(
                         user_input,
                         st.session_state.memory,
+                        user_role=user_role,
                         verbose=False,
                     )
                     reply = format_citations_for_display(reply)

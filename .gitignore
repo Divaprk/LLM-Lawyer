@@ -1,1 +1,18 @@
-/venv
+# Vector Database
+chroma.sqlite3
+/chroma_db/
+**/chroma.sqlite3
+**/vectorstore/
+
+# BM25 / Search Indexes
+*.pkl
+*.bin
+*.pickle
+# Ignore these files ANYWHERE in the project
+**/*.pkl
+**/*.bin
+**/*.pickle
+# Environment/Secrets
+.env
+__pycache__/
+.venv/
