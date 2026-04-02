@@ -13,8 +13,6 @@ Ask questions like:
 
 ## Features
 
-## Features
-
 - **Hybrid search** — BM25 keyword + semantic vector search fused via Reciprocal Rank Fusion (RRF); catches both exact legal terms and paraphrased questions
 - **Weighted retrieval** — source-type multipliers (statute / guideline / case) applied post-RRF to calibrate result mix against corpus composition
 - **Topic-boosted retrieval** — query matched against domain keywords (workplace safety, FWA, PDPA, etc.) to sharpen search terms before retrieval
@@ -77,7 +75,7 @@ Ask questions like:
 
 ```bash
 git clone <repo-url>
-cd LLM-Lawyer\test1
+cd LLM-Lawyer
 ```
 
 ### Step 2 — Create a virtual environment

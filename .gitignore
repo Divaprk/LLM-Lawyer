@@ -8,13 +8,17 @@ chroma.sqlite3
 *.pkl
 *.bin
 *.pickle
-# Ignore these files ANYWHERE in the project
 **/*.pkl
 **/*.bin
 **/*.pickle
+
 # Environment/Secrets
 .env
+
+# Python
 __pycache__/
+*.pyc
 .venv/
-..venv/
-/venv
+venv/
+
+.claude/
