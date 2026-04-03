@@ -58,6 +58,7 @@ Ask questions like:
 | eLitigation court judgments | 97 | ECT and High Court employment cases |
 | **Total** | **1,053** | |
 
+
 **Sources:**
 - https://sso.agc.gov.sg (all statutes)
 - https://www.tal.sg/tafep/employment-practices/tripartite-standards
@@ -65,7 +66,12 @@ Ask questions like:
 - https://singaporelegaladvice.com/law-articles/employment-law/
 - https://www.elitigation.sg
 
----
+
+
+## System
+
+![System Pipeline](assets/architecture-1.png)
+
 
 ## Setup
 
