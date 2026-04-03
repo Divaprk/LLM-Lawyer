@@ -127,8 +127,8 @@ window.addEventListener('scroll', () => {
     // Shift background hue subtly as user scrolls down
     const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
     const scrollPercent = Math.min(1, Math.max(0, window.scrollY / maxScroll));
-    // Transitions from base dark navy (10, 14, 23) to slightly illuminated deep metallic blue (15, 25, 40)
-    document.body.style.backgroundColor = `rgb(${10 + scrollPercent * 5}, ${14 + scrollPercent * 11}, ${23 + scrollPercent * 17})`;
+    // Transitions from near black (3, 5, 8) to slightly illuminated deep metallic blue (17, 27, 42)
+    document.body.style.backgroundColor = `rgb(${3 + scrollPercent * 14}, ${5 + scrollPercent * 22}, ${8 + scrollPercent * 34})`;
 });
 
 function animateParticles() {

@@ -2,8 +2,8 @@
    VARIABLES & RESET
    ========================================================================= */
 :root {
-    --bg-dark: #0a0e17; /* Very dark navy */
-    --bg-darker: #05070a; /* Almost black */
+    --bg-dark: #030508; /* Very deep black-navy */
+    --bg-darker: #010204; /* Almost pure black */
     --accent-primary: #00d2ff;
     --accent-secondary: #3a7bd5;
     --text-main: #e2e8f0;
