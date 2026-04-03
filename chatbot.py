@@ -13,15 +13,14 @@ LLM provider: OpenAI (gpt-4o-mini — cheap, fast, good at instruction following
 Switch to a different provider by changing the _call_llm() function.
 
 Requirements:
-    pip install openai streamlit
+    pip install openai python-dotenv
 
 Usage:
     # Set your API key first (once):
     # Windows:  set OPENAI_API_KEY=sk-...
     # Mac/Linux: export OPENAI_API_KEY=sk-...
 
-    streamlit run chatbot.py          # Web UI
-    python chatbot.py                 # CLI test mode (no UI)
+    python chatbot.py                 # CLI test mode
 """
 
 import os
@@ -1023,160 +1022,6 @@ Answer the question based ONLY on the context above. Cite each source used."""
     memory.add_turn("assistant", llm_answer)
 
     return verified_answer, warnings, results, confidence
-
-
-# ─────────────────────────────────────────────
-# STREAMLIT UI
-# ─────────────────────────────────────────────
-
-def run_streamlit():
-    import streamlit as st
-
-    st.set_page_config(
-        page_title="Singapore Employment Law Assistant",
-        page_icon="⚖️",
-        layout="wide",
-    )
-
-    st.markdown(
-        """
-        <style>
-        .disclaimer-footer {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: #2a2a2a;
-            color: #cccccc;
-            text-align: center;
-            padding: 10px 16px;
-            font-size: 0.85rem;
-            z-index: 9999;
-            border-top: 1px solid #555555;
-        }
-        </style>
-        <div class="disclaimer-footer">
-            ⚠️ This is general information only and does not constitute legal advice.
-            For your specific situation, please consult a qualified employment lawyer or the
-            <a href="https://www.mom.gov.sg" target="_blank" style="color:#cccccc; text-decoration: underline;">Ministry of Manpower (mom.gov.sg)</a>.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # ── Session state ──
-    if "memory" not in st.session_state:
-        st.session_state.memory = ConversationMemory()
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []  # list of (role, content, warnings)
-
-    # ── Sidebar ──
-    with st.sidebar:
-        st.title("⚖️ SG Employment Law")
-        user_role = st.selectbox(
-            "I am a...",
-            options=["General Public", "Student", "HR Staff", "Lawyer"],
-            index=0
-        )
-        st.divider()
-        st.markdown("""
-**Ask questions like:**
-- *My boss fired me without reason. What can I do?*
-- *How many days of annual leave am I entitled to?*
-- *My salary hasn't been paid for 2 months*
-- *Can my employer cut my pay without telling me?*
-- *What is the notice period for resignation?*
-        """)
-        st.divider()
-        if st.button("🗑️ Clear conversation"):
-            st.session_state.memory.clear()
-            st.session_state.chat_history = []
-            st.rerun()
-
-        # Show user context if extracted
-        if st.session_state.memory.user_context:
-            st.divider()
-            st.caption("📋 Detected context:")
-            st.caption(st.session_state.memory.user_context)
-
-    # ── Page header ──
-    st.title("⚖️ Singapore Employment Law Assistant")
-    st.caption("Ask questions about your employment rights in Singapore. Powered by the Employment Act, MOM guidelines, and court judgments.")
-
-    # ── Chat history ──
-    for role, content, warnings in st.session_state.chat_history:
-        with st.chat_message(role):
-            st.markdown(content, unsafe_allow_html=True)
-            if warnings:
-                for w in warnings:
-                    st.warning(w)
-
-    # ── Input box ──
-    if user_input := st.chat_input("Ask about your employment rights..."):
-
-        # Show user message immediately
-        st.session_state.chat_history.append(("user", user_input, []))
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        # Generate answer
-        with st.chat_message("assistant"):
-            with st.spinner("Searching legal database..."):
-                try:
-                    reply, warnings, chunks, confidence = answer(
-                        user_input,
-                        st.session_state.memory,
-                        user_role=user_role,
-                        verbose=False,
-                    )
-                    reply = format_citations_for_display(reply)
-                    st.markdown(reply, unsafe_allow_html=True)
-
-                    # ── Confidence badge ──
-                    badge_color = {"green": "#2e7d32", "orange": "#e65100", "red": "#b71c1c"}[confidence["color"]]
-                    st.markdown(
-                        f'<span style="background:{badge_color};color:white;padding:3px 10px;'
-                        f'border-radius:12px;font-size:0.8rem;font-weight:600;">'
-                        f'🎯 Confidence: {confidence["label"]} ({confidence["score"]}/100)'
-                        f'</span>',
-                        unsafe_allow_html=True,
-                    )
-
-                    for w in warnings:
-                        st.warning(w)
-
-                    # Expandable source viewer
-                    with st.expander("📚 View retrieved sources"):
-                        for i, chunk in enumerate(chunks, 1):
-                            meta = chunk.get("metadata", {})
-                            src  = meta.get("source_type", "")
-                            if src == "statute":
-                                act = meta.get("act_name", "Statute")
-                                label = f"{act} s.{meta.get('section','')} — {meta.get('section_title','')}"
-                            elif src == "guideline":
-                                label    = meta.get("title", "")
-                                category = meta.get("category", "")
-                                if category == "Tripartite Standard":
-                                    label = f"[TS] {label}"
-                                elif category == "Tripartite Guideline":
-                                    label = f"[TG-FWAR] {label}"
-                                elif category == "WorkRight Guide":
-                                    label = f"[WorkRight] {label}"
-                            elif src == "case":
-                                label = meta.get("case_name", "")[:60]
-                            else:
-                                label = chunk.get("chunk_id", "")
-                            st.caption(f"[{i}] {src.upper()}: {label}")
-                            st.caption(f"Score: {chunk.get('rrf_score', 0):.4f} | URL: {meta.get('url','')}")
-                            st.text(chunk.get("text", "")[:300] + "...")
-                            st.divider()
-
-                except Exception as e:
-                    reply = f"An error occurred: {e}"
-                    warnings = []
-                    st.error(reply)
-
-        st.session_state.chat_history.append(("assistant", reply, warnings))
 
 
 # ─────────────────────────────────────────────
