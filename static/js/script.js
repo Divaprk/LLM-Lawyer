@@ -26,37 +26,93 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+// Mouse tracking for interactive repulsion
+let mouse = {
+    x: null,
+    y: null,
+    radius: 180 // Distance at which icons start avoiding the mouse
+};
+window.addEventListener('mousemove', (e) => {
+    mouse.x = e.x;
+    mouse.y = e.y;
+});
+window.addEventListener('mouseout', () => {
+    mouse.x = null;
+    mouse.y = null;
+});
+
+const LAW_ICONS = [
+    '\uf24e', // fa-scale-balanced
+    '\uf0b1', // fa-briefcase
+    '\uf70e', // fa-scroll
+    '\uf56c'  // fa-file-contract
+];
+
 class Particle {
     constructor() {
         this.x = Math.random() * canvas.width;
         this.y = Math.random() * canvas.height;
-        this.size = Math.random() * 2 + 0.5;
-        this.baseSpeedY = Math.random() * -0.5 - 0.2; // Move slowly upwards
+        this.size = Math.random() * 21 + 15; // 1.5x Icon size (font size)
+        this.baseSpeedY = Math.random() * -0.6 - 0.3; // Move slowly upwards
         this.speedY = this.baseSpeedY;
         this.speedX = (Math.random() - 0.5) * 0.5;
-        this.opacity = Math.random() * 0.4 + 0.1;
+        this.opacity = Math.random() * 0.3 + 0.1;
+        
+        // Icon selection and rotation
+        this.icon = LAW_ICONS[Math.floor(Math.random() * LAW_ICONS.length)];
+        this.angle = Math.random() * Math.PI * 2;
+        this.rotationSpeed = (Math.random() - 0.5) * 0.02;
     }
     update(scrollDelta) {
+        // Handle mouse repulsion
+        if (mouse.x !== null) {
+            let dx = mouse.x - this.x;
+            let dy = mouse.y - this.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < mouse.radius) {
+                // Calculate force away from mouse
+                const forceDirectionX = dx / distance;
+                const forceDirectionY = dy / distance;
+                const force = (mouse.radius - distance) / mouse.radius; // 0 to 1
+                
+                const pushMultiplier = 6.5;
+                this.x -= forceDirectionX * force * pushMultiplier;
+                this.y -= forceDirectionY * force * pushMultiplier;
+            }
+        }
+
         // Adjust vertical position with momentum from scroll
         this.y += this.speedY - (scrollDelta * 0.15);
         this.x += this.speedX;
+        
+        // Update rotation
+        this.angle += this.rotationSpeed;
 
         // Wrap around
-        if (this.y > canvas.height) this.y = 0;
-        if (this.y < 0) this.y = canvas.height;
-        if (this.x > canvas.width) this.x = 0;
-        if (this.x < 0) this.x = canvas.width;
+        if (this.y > canvas.height + 50) this.y = -50;
+        if (this.y < -50) this.y = canvas.height + 50;
+        if (this.x > canvas.width + 50) this.x = -50;
+        if (this.x < -50) this.x = canvas.width + 50;
     }
     draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        
+        // FontAwesome styling
+        ctx.font = `900 ${this.size}px "Font Awesome 6 Free"`;
         ctx.fillStyle = `rgba(0, 210, 255, ${this.opacity})`;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.icon, 0, 0);
+        
+        ctx.restore();
     }
 }
 
-// Init particles
-for (let i = 0; i < 60; i++) {
+// Init particles (fewer items needed since they are larger icons)
+for (let i = 0; i < 35; i++) {
     particles.push(new Particle());
 }
 
