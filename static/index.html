@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SG Employment Law Assistant</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Background elements -->
+    <canvas id="particle-canvas"></canvas>
+
+
+    <!-- Hero Section -->
+    <section class="hero" id="hero">
+        <div class="hero-content">
+            <div class="tagline">Empowering Employees & Employers</div>
+            <h1 class="hero-title">Singapore Employment Law<br><span class="highlight">Reimagined</span></h1>
+            <p class="hero-subtitle">Get immediate clarity on your rights regarding termination, salary, leave, and more. Powered by the Employment Act and MOM guidelines.</p>
+            <div class="hero-image-container">
+                <img src="/200.gif" alt="Legal Assistant Animation" class="hero-gif">
+            </div>
+            <a href="#chat-section" class="scroll-btn">
+                <span>Start Chatting</span>
+                <i class="fa-solid fa-chevron-down animated-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <!-- Chat Section -->
+    <section class="chat-wrapper" id="chat-section">
+        <div class="chat-container fade-in-section">
+            <!-- Sidebar -->
+            <aside class="sidebar glass-panel">
+                <div class="sidebar-header">
+                    <h2><i class="fa-solid fa-scale-balanced"></i> Context Settings</h2>
+                </div>
+                <div class="sidebar-content">
+                    <div class="form-group">
+                        <label for="role-select">I am a...</label>
+                        <select id="role-select" class="glass-input">
+                            <option value="General Public">General Public</option>
+                            <option value="Student">Student</option>
+                            <option value="HR Staff">HR Staff</option>
+                            <option value="Lawyer">Lawyer</option>
+                        </select>
+                    </div>
+
+                    <div class="suggestions">
+                        <h3><i class="fa-solid fa-lightbulb"></i> Try asking:</h3>
+                        <ul>
+                            <li><button class="suggestion-btn glass-btn" onclick="sendSuggestion(this.innerText)">My boss fired me without reason. What can I do?</button></li>
+                            <li><button class="suggestion-btn glass-btn" onclick="sendSuggestion(this.innerText)">How many days of annual leave am I entitled to?</button></li>
+                            <li><button class="suggestion-btn glass-btn" onclick="sendSuggestion(this.innerText)">My salary hasn't been paid for 2 months</button></li>
+                            <li><button class="suggestion-btn glass-btn" onclick="sendSuggestion(this.innerText)">Can my employer cut my pay without telling me?</button></li>
+                            <li><button class="suggestion-btn glass-btn" onclick="sendSuggestion(this.innerText)">What is the notice period for resignation?</button></li>
+                        </ul>
+                    </div>
+
+                    <!-- Detected User Context (mirrors Streamlit sidebar) -->
+                    <div id="context-panel" class="context-panel" style="display:none;">
+                        <h3><i class="fa-solid fa-clipboard-list"></i> Detected context:</h3>
+                        <p id="context-text" class="context-text"></p>
+                    </div>
+
+                    <div class="sidebar-actions">
+                        <button id="clear-btn" class="glass-btn danger"><i class="fa-solid fa-trash-can"></i> Clear Chat</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Chat -->
+            <main class="chat-area glass-panel">
+                <header class="chat-header">
+                    <div class="header-info">
+                        <h2>SG Employment Law Assistant</h2>
+                        <p class="status"><span class="pulse"></span> Online and Ready</p>
+                    </div>
+                    <div class="disclaimer">
+                        <i class="fa-solid fa-circle-info"></i> For Educational Purposes Only
+                    </div>
+                </header>
+                
+                <div class="messages" id="messages">
+                    <div class="message assistant-message intro-animation">
+                        <div class="avatar"><img src="/giphy.gif" alt="Bot" class="avatar-img"></div>
+                        <div class="content markdown-body">
+                            <p>Hello! I am your <strong>Singapore Employment Law Assistant</strong>.</p>
+                            <p>Ask me any questions you have regarding employment rights, workplace fairness, or CPF.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <form id="chat-form">
+                        <input type="text" id="chat-input" class="glass-input textarea-style" placeholder="Ask about your employment rights..." autocomplete="off" required>
+                        <button type="submit" id="send-btn" class="glass-btn primary-solid"><i class="fa-solid fa-paper-plane"></i></button>
+                    </form>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <!-- Source Modal -->
+    <div id="source-modal" class="modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2 id="modal-title"><i class="fa-solid fa-book-open"></i> Retrieved Sources</h2>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Foot note -->
+    <footer class="footer">
+        <p>⚠️ This is general information only and does not constitute legal advice. For your specific situation, please consult a qualified employment lawyer or the <a href="https://www.mom.gov.sg" target="_blank">Ministry of Manpower</a>.</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html>

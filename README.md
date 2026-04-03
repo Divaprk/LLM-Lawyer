@@ -139,7 +139,7 @@ This creates two items that are **not** in the repo (too large for git):
 ### Step 6 — Launch the chatbot
 
 ```bash
-streamlit run chatbot.py
+uvicorn app:app --reload
 ```
 
-Your browser will open automatically at `http://localhost:8501`.
+Then, open your browser and navigate to `http://127.0.0.1:8000`.

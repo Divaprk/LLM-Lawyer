@@ -17,3 +17,8 @@ streamlit>=1.35.0
 # Optional: only needed if re-scraping eLitigation (requires Chrome installed)
 # selenium==4.21.0
 # webdriver-manager==4.0.1
+
+# Phase 4 - Custom Frontend Migration
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0

@@ -895,7 +895,7 @@ def answer(
     memory: ConversationMemory,
     user_role: str = "General Public",
     verbose: bool = False,
-) -> tuple[str, list[str], list[dict]]:
+) -> tuple[str, list[str], list[dict], dict]:
     """
     Full RAG pipeline for one user turn.
 
