@@ -1207,21 +1207,4 @@ def run_cli():
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import sys
-    if "streamlit" in sys.modules:
-        # Running via `streamlit run chatbot.py`
-        run_streamlit()
-    else:
-        # Running via `python chatbot.py`
-        run_cli()
-
-# When run via `streamlit run chatbot.py`, Streamlit imports the module
-# at the top level, so we need this guard to trigger the UI.
-# `__name__` is NOT "__main__" in that case, so we check for streamlit.
-try:
-    import streamlit as _st
-    # If streamlit imported us (not python chatbot.py), run the UI
-    if __name__ != "__main__":
-        run_streamlit()
-except ImportError:
-    pass
+    run_cli()
