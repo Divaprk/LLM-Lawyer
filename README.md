@@ -164,14 +164,23 @@ However we could not trust the output without checking it. The citation verifica
 
 ---
 
-### One feature we can add in the future
+### Features we can add in the future
 
 A calculation engine for statutory math. Overtime pay, salary-in-lieu of notice, public holiday pay: the system understands these formulas and can explain them accurately, but ask it to compute an actual number and the results are inconsistent. That is a real problem. A user who has just found out their employer owes them three months of unpaid overtime does not want a formula. They want to know how much.
 
 The system is already set up to support this. Situation intake extracts salary, job type, hours worked, and employment duration as structured fields. Retrieval identifies the relevant statutory formula. What is missing is a deterministic Python layer that takes those extracted values, does the arithmetic correctly, and injects the result into the LLM's context before generation. It would sit between retrieval and generation and would not require changes to either. The modular design makes this more tractable than it might seem, and it is the next logical piece.
+
+The corpus is the most obvious constraint. At 1,053 source chunks, coverage is reasonable for the major statutes but thin everywhere else. CPF appeals, tax implications of retrenchment benefits, employment pass revocation, sector-specific collective agreements: these come up in real questions and the system currently has little to say about them. Expanding to include MOM circulars, more ECT and SICC case transcripts, and the full suite of Tripartite Guidelines would directly improve answer quality without any changes to the pipeline.
+
+Retrieval quality is the next lever. The current pipeline uses RRF to fuse BM25 and vector search, which is a solid baseline, but the ranking is done purely by the retriever. A cross-encoder reranker sitting between retrieval and generation would re-score the top candidates by jointly comparing the query and each chunk, rather than scoring them independently. In practice this tends to push the most contextually relevant chunk to the top, which matters a lot when the right answer is buried in position four or five of the retrieval results. The added latency is real but bounded, and the quality improvement on ambiguous queries would be worth it.
+
+Multi-language support is a gap that reflects something real about Singapore. A significant portion of the workforce, including domestic workers, construction workers, and workers whose first language is Mandarin, Malay, or Tamil, has the most to gain from this kind of tool and the least access to legal advice. The retrieval layer would not need to change much: embedding models like multilingual-E5 handle cross-lingual search reasonably well, meaning a question in Mandarin can retrieve the correct English statute chunk. The bigger work is on the generation side, where the system prompt and response formatting would need to be adapted per language, and the situation intake questions rephrased in ways that feel natural rather than translated.
+
+Longer term, the system could move toward agentic behavior: drafting a demand letter from an extracted situation, filling out an ECT claim form, or walking a user through a step-by-step process for filing a complaint with MOM. Each of these requires more than retrieval and generation. They require structured output, form awareness, and the ability to hold state across multiple turns with a specific procedural goal. The architecture is not far from supporting this, but it would require deliberate design rather than incremental additions.
 
 ---
 
 ### Feedback as actual users
 
 The citation format is one we are split on. Showing `[Employment Act s.38]` inline is technically correct and important for trust, but it makes responses feel more like legal documents than conversations. Someone who just wants to know if their employer is in the wrong might find it off putting. We think collapsible source references at the bottom of each response would preserve the verifiability without front-loading every answer with section numbers, though that is a UI decision as much as a system one.
+
