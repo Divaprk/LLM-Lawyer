@@ -250,10 +250,18 @@ body {
 .chat-container {
     display: grid;
     grid-template-columns: 300px 1fr;
-    gap: 24px;
+    gap: 0;
     width: 100%;
     max-width: 1400px;
     height: 85vh;
+    /* Unified glass panel */
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: var(--glass-shadow);
+    overflow: hidden;
 }
 
 /* Sidebar */
@@ -262,6 +270,16 @@ body {
     flex-direction: column;
     padding: 24px;
     overflow-y: auto;
+    /* Semi-translucent internal divider */
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 14, 28, 0.45);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-top: none;
+    border-left: none;
+    border-bottom: none;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -273,9 +291,15 @@ body {
 }
 
 .sidebar-header {
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--glass-border);
+    background: rgba(0, 100, 160, 0.18);
+    margin: -24px -24px 30px -24px;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(0, 210, 255, 0.15);
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    min-height: 85px;
+    box-sizing: border-box;
 }
 
 .sidebar-header h2 {
@@ -367,15 +391,23 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: rgba(15, 25, 50, 0.25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .chat-header {
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(0, 100, 160, 0.18);
     padding: 20px 24px;
-    border-bottom: 1px solid var(--glass-border);
+    border-bottom: 1px solid rgba(0, 210, 255, 0.15);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    min-height: 85px;
+    box-sizing: border-box;
 }
 
 .header-info h2 {
@@ -704,6 +736,8 @@ body {
     
     .sidebar {
         height: 300px;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
     
     .chat-area {
