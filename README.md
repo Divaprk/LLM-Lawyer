@@ -148,7 +148,7 @@ uvicorn app:app --reload
 
 Then, open your browser and navigate to `http://127.0.0.1:8000`.
 
-If anything doesn't work, switch to the `main` branch and try again.
+If something doesn't work, switch to the `main` branch, follow its README set up, and try again.
 
 ---
 
