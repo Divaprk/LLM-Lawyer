@@ -33,6 +33,10 @@ Ask questions like:
   - Answer completeness
   - Citation verification results
 
+## Data Collection
+
+![Data Collection Pipeline](assets/image.png)
+
 ## Knowledge Base
 
 | Source | Chunks | Content |
