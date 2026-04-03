@@ -56,6 +56,13 @@ PROCESSED_CHUNKS_PATH = Path("data/processed_chunks.jsonl")
 # ─────────────────────────────────────────────
 
 def get_role_instructions(role: str) -> str:
+    """
+    Return role-specific instructions that are appended to the system prompt.
+    The same legal question is answered differently depending on who is asking.
+
+    Supported roles: "General Public", "Student", "HR Staff", "Lawyer".
+    Defaults to "General Public" if an unrecognised role is passed.
+    """
     roles = {
         "General Public": (
     "ROLE: General Public.\n"
@@ -136,6 +143,16 @@ FORMAT:
 # ─────────────────────────────────────────────
 
 def _call_llm(messages: list[dict], max_tokens: int = LLM_MAX_TOKENS) -> str:
+    """
+    Send a message list to the OpenAI chat completions API and return the reply text.
+
+    Args:
+        messages:   OpenAI-format message list, e.g. [{"role": "user", "content": "..."}]
+        max_tokens: Upper limit on generated tokens (default: LLM_MAX_TOKENS).
+
+    Returns:
+        The assistant's reply as a stripped string.
+    """
     from openai import OpenAI
     client = OpenAI()  # uses OPENAI_API_KEY from environment
     response = client.chat.completions.create(
@@ -178,7 +195,9 @@ Now rewrite this query. Reply with ONLY the rewritten query, nothing else:
 def rewrite_query_llm(query: str, conversation_context: str = "") -> str:
     """
     Use the LLM to rewrite the user's query into precise legal search terms.
-    Falls back to the original query if the LLM call fails.
+    Falls back to the original query if the LLM call fails, or if the
+    rewritten query is more than 4x longer than the original (sanity check
+    against runaway outputs).
     """
     prompt = REWRITE_PROMPT
     if conversation_context:
@@ -944,6 +963,10 @@ def answer(
     # If user just answered our clarifying questions, retrieve against the original question
     effective_question = memory.pending_query if memory.pending_query else query
     memory.pending_query = ""  # clear it now that we're proceeding
+    # ── 2b. Deterministic pay calculation (PH / OT) ──
+    # If the user's message looks like a payment calculation request, extract the
+    # relevant figures and run the formula before passing them to the LLM.
+    # The math result is injected into the prompt so the LLM can explain it.
     if any(word in query.lower() for word in ["calculate", "how much", "pay", "salary", "math"]):
         raw_calc_data = _call_llm([{"role": "user", "content": CALC_EXTRACTION_PROMPT.format(text=query + " " + memory.user_context)}])
         try:

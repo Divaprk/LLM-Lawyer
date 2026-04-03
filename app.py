@@ -22,6 +22,14 @@ class ClearRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
+    """
+    Main chat endpoint. Accepts a user message and session ID, runs the full
+    RAG pipeline, and returns the formatted reply, citation warnings, confidence
+    score, and a list of source chunks with labels and preview text.
+
+    Sessions are stored in memory keyed by session_id. A new ConversationMemory
+    is created automatically on the first message for a given session.
+    """
     session_id = req.session_id
     if session_id not in sessions:
         sessions[session_id] = ConversationMemory()
@@ -81,6 +89,11 @@ async def chat_endpoint(req: ChatRequest):
 
 @app.post("/api/clear")
 async def clear_endpoint(req: ClearRequest):
+    """
+    Clear the conversation history and user context for a session.
+    Called when the user clicks the "Clear Chat" button in the frontend.
+    No-ops silently if the session ID does not exist.
+    """
     session_id = req.session_id
     if session_id in sessions:
         sessions[session_id].clear()

@@ -248,7 +248,7 @@ def embed_chunks(chunks: list[dict]) -> list[list[float]]:
     Embed the embed_text of every chunk using BAAI/bge-base-en-v1.5.
 
     BGE models are trained with a query prefix for retrieval:
-      - At QUERY time:    prepend "Represent this sentence: "
+      - At QUERY time:    prepend "Represent this sentence for searching relevant passages: "
       - At DOCUMENT time: no prefix needed (what we do here)
 
     Returns a list of embedding vectors in the same order as chunks.
