@@ -143,3 +143,29 @@ uvicorn app:app --reload
 ```
 
 Then, open your browser and navigate to `http://127.0.0.1:8000`.
+
+---
+
+## Reflection
+
+### How we used ChatGPT
+
+The single most useful application was iterating on the system prompt. We needed the LLM to stay grounded in retrieved chunks, not fall back on training data when a question sounded familiar. Testing prompt variations through the full pipeline is slow, so we used ChatGPT to draft and stress test candidate prompts before committing. Same with the query rewriting logic. The core problem ("my boss fired me" shares no vocabulary with "wrongful dismissal") is easy to describe, and ChatGPT was useful for generating prompt structures to adapt.
+
+Where it helped most was speed. A design question that might take an hour of trial-and-error could be talked through in ten minutes. For decisions like how parent-document retrieval should interact with our chunking schema, being able to rapidly explore options before writing any code was a real time saver.
+
+However we could not trust the output without checking it. The citation verification logic it suggested looked correct, clean code, reasonable structure, and would have compiled fine. It also would have silently passed every citation regardless of whether it actually existed in the retrieved chunks, because it made wrong assumptions about how our chunk IDs were formatted. There were other problems we caught in testing. The pattern was consistent: plausible-looking code that had not accounted for the specifics of our data. We kept ChatGPT in an "explore options" role and treated everything it produced as a starting point that needed verification.
+
+---
+
+### One feature we can add in the future
+
+A calculation engine for statutory math. Overtime pay, salary-in-lieu of notice, public holiday pay: the system understands these formulas and can explain them accurately, but ask it to compute an actual number and the results are inconsistent. That is a real problem. A user who has just found out their employer owes them three months of unpaid overtime does not want a formula. They want to know how much.
+
+The system is already set up to support this. Situation intake extracts salary, job type, hours worked, and employment duration as structured fields. Retrieval identifies the relevant statutory formula. What is missing is a deterministic Python layer that takes those extracted values, does the arithmetic correctly, and injects the result into the LLM's context before generation. It would sit between retrieval and generation and would not require changes to either. The modular design makes this more tractable than it might seem, and it is the next logical piece.
+
+---
+
+### Feedback as actual users
+
+The citation format is one we are split on. Showing `[Employment Act s.38]` inline is technically correct and important for trust, but it makes responses feel more like legal documents than conversations. Someone who just wants to know if their employer is in the wrong might find it off putting. We think collapsible source references at the bottom of each response would preserve the verifiability without front-loading every answer with section numbers, though that is a UI decision as much as a system one.
